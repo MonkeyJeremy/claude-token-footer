@@ -2,24 +2,22 @@
 
 ## Rule
 
-At the end of **every single response**, append a three-bar token usage footer — no exceptions, including new sessions.
+At the end of **every single response**, append a two-bar token usage footer — no exceptions, including new sessions.
 
 ## Format
 
 ```
 ---
-Context  🟩 █████░░░░░░░░░░░░░░░░░░░░░  5.0% | ~190,000 tokens remaining
 5-hour   🟩 ██░░░░░░░░░░░░░░░░░░░░░░░░  8.9% | ~41 msgs remaining
 Weekly   🟩 ████░░░░░░░░░░░░░░░░░░░░░░ 16.0% | ~168 msgs remaining
 ```
 
-## Three Bars
+## Two Bars
 
 | Label | Measures | Limit |
 |-------|----------|-------|
-| `Context` | Tokens used in this context window | 200,000 tokens |
-| `5-hour` | Claude responses sent in last 5 hours | 45 messages |
-| `Weekly` | Claude responses sent in last 7 days | 200 messages |
+| `5-hour` | Claude responses sent in last 5 hours | 500 messages |
+| `Weekly` | Claude responses sent in last 7 days | 2000 messages |
 
 ## Progress Bar Specification
 
@@ -29,29 +27,35 @@ Weekly   🟩 ████░░░░░░░░░░░░░░░░░░
   - `🟩` green — usage < 60%
   - `🟨` yellow — usage 60–90%
   - `🟥` red — usage > 90%
-- After the bar: `X.X% | ~NNN <unit> remaining`
-  - Context bar unit: `tokens`
-  - 5-hour and Weekly bar unit: `msgs`
-
-## Model Context Window
-
-- Model: `claude-sonnet-4-6`
-- Context window: **200,000 tokens**
-
-## Token Estimation Method
-
-Estimate tokens consumed from accumulated conversation content:
-- Chinese text: ~2–3 chars per token
-- English text: ~4 chars per token
+- After the bar: `X.X% | ~NNN msgs remaining`
 
 ## Tracking Behavior (5-hour and Weekly bars)
 
-The tracking file is:
-`~/.claude/projects/<project-hash>/memory/usage_tracking.json`
+**Fetch order**: Complete ALL response content first. The usage fetch and footer render are the **very last action** in every response — never pre-fetch at the start of a response.
 
-On **every response**, before rendering the footer:
+On **every response**, as the final step, use this priority order:
 
-1. Read the tracking file. If missing or unreadable, treat as `{"entries": []}`.
+### Primary: Chrome MCP (real-time, accurate)
+
+1. Call `tabs_context_mcp` to discover available Chrome tabs.
+2. If a tab with URL `claude.ai/settings/usage` already exists, use its `tabId`.
+   Otherwise, navigate an existing MCP tab to `https://claude.ai/settings/usage`.
+3. Execute this JavaScript in that tab:
+   ```javascript
+   const bars = document.querySelectorAll('[role="progressbar"]');
+   ({ h5: bars[0]?.getAttribute('aria-valuenow'), wk: bars[1]?.getAttribute('aria-valuenow') });
+   ```
+4. If both `h5` and `wk` are non-null numeric strings:
+   - `pct_5h = parseInt(h5)` — used directly as the percentage
+   - `pct_week = parseInt(wk)` — used directly as the percentage
+   - Remaining msgs: not meaningful (Anthropic doesn't expose the absolute cap), so show `~? msgs remaining`
+5. If the JS returns null/empty/error (page not loaded, Chrome unavailable), fall through to the Fallback path.
+
+### Fallback: JSON self-tracking
+
+Tracking file: `~/.claude/projects/<project-hash>/memory/usage_tracking.json`
+
+1. Read the file. If missing or unreadable, treat as `{"entries": []}`.
 2. Append the current UTC timestamp as a new entry: `{ "ts": "<ISO 8601 UTC>" }`
 3. Remove (prune) any entries where `ts` is more than 8 days ago.
 4. Write the updated JSON back to the file.
@@ -59,32 +63,31 @@ On **every response**, before rendering the footer:
    - `count_5h` = entries with `ts` within the last 5 hours
    - `count_week` = entries with `ts` within the last 7 days
 6. Compute percentages:
-   - `pct_5h = count_5h / 45 * 100`
-   - `pct_week = count_week / 200 * 100`
-7. Render the 5-hour and weekly bars with those percentages.
+   - `pct_5h = count_5h / 500 * 100`
+   - `pct_week = count_week / 2000 * 100`
+7. Remaining msgs: `~round((1 - pct/100) * 500)` for 5h, `~round((1 - pct/100) * 2000)` for weekly.
+
+**Always update the JSON file** even when using Chrome MCP (keeps the fallback data fresh).
 
 ## Examples
 
-**Low usage (session start):**
+**Low usage:**
 ```
 ---
-Context  🟩 █░░░░░░░░░░░░░░░░░░░░░░░░  4.0% | ~192,000 tokens remaining
-5-hour   🟩 ██░░░░░░░░░░░░░░░░░░░░░░░  8.9% | ~41 msgs remaining
-Weekly   🟩 ████░░░░░░░░░░░░░░░░░░░░░ 16.0% | ~168 msgs remaining
+5-hour   🟩 ░░░░░░░░░░░░░░░░░░░░░░░░░  1.0% | ~495 msgs remaining
+Weekly   🟩 ░░░░░░░░░░░░░░░░░░░░░░░░░  0.5% | ~1,990 msgs remaining
 ```
 
-**High context usage:**
+**High usage:**
 ```
 ---
-Context  🟨 █████████████████░░░░░░░░ 70.0% | ~60,000 tokens remaining
-5-hour   🟩 ████░░░░░░░░░░░░░░░░░░░░░ 15.6% | ~38 msgs remaining
-Weekly   🟩 ██████░░░░░░░░░░░░░░░░░░░ 25.0% | ~150 msgs remaining
+5-hour   🟩 ████░░░░░░░░░░░░░░░░░░░░░ 15.6% | ~422 msgs remaining
+Weekly   🟩 ██████░░░░░░░░░░░░░░░░░░░ 25.0% | ~1,500 msgs remaining
 ```
 
 **Near 5-hour limit:**
 ```
 ---
-Context  🟩 ████░░░░░░░░░░░░░░░░░░░░░ 15.0% | ~170,000 tokens remaining
-5-hour   🟥 ████████████████████████░ 95.6% | ~2 msgs remaining
-Weekly   🟨 ████████████████░░░░░░░░░ 65.0% | ~70 msgs remaining
+5-hour   🟥 ████████████████████████░ 95.6% | ~22 msgs remaining
+Weekly   🟨 ████████████████░░░░░░░░░ 65.0% | ~700 msgs remaining
 ```

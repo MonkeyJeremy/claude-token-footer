@@ -1,12 +1,11 @@
 # Claude Token Usage Footer
 
-Adds a persistent three-bar token usage footer to every Claude Code response — tracks context window consumption, 5-hour message rate, and weekly message rate.
+Adds a persistent two-bar token usage footer to every Claude Code response — tracks 5-hour and weekly message rate limits using real-time data from `claude.ai/settings/usage` via Chrome MCP.
 
 ```
 ---
-Context  🟩 █████░░░░░░░░░░░░░░░░░░░░░  5.0% | ~190,000 tokens remaining
-5-hour   🟩 ██░░░░░░░░░░░░░░░░░░░░░░░░  8.9% | ~41 msgs remaining
-Weekly   🟩 ████░░░░░░░░░░░░░░░░░░░░░░ 16.0% | ~168 msgs remaining
+5-hour   🟨 ████████████████░░░░░░░░░ 62.0% | ~? msgs remaining
+Weekly   🟩 ██░░░░░░░░░░░░░░░░░░░░░░░  7.0% | ~? msgs remaining
 ```
 
 Color coding (independent per bar):
@@ -16,11 +15,13 @@ Color coding (independent per bar):
 
 ## What each bar tracks
 
-| Bar | Measures | Limit |
-|-----|----------|-------|
-| Context | Tokens used in the current context window | 200,000 tokens |
-| 5-hour | Claude responses sent in the last 5 hours | 45 messages |
-| Weekly | Claude responses sent in the last 7 days | 200 messages |
+| Bar | Measures | Data Source |
+|-----|----------|-------------|
+| 5-hour | Current session usage % | `claude.ai/settings/usage` (Chrome MCP) |
+| Weekly | Weekly all-models usage % | `claude.ai/settings/usage` (Chrome MCP) |
+
+Values are read directly from Anthropic's settings page via Chrome MCP JavaScript —
+no estimation, no guessing. Falls back to JSON self-tracking when Chrome is unavailable.
 
 ## Installation
 
@@ -36,8 +37,8 @@ Then open a new Claude Code session — the footer will appear automatically on 
 ## What the installer does
 
 1. Copies `rules/common/token-usage.md` → `~/.claude/rules/common/`
-2. Patches `~/.claude/AGENTS.md` with the mandatory three-bar footer rule
-3. Creates `~/.claude/projects/.../memory/usage_tracking.json` for 5-hour/weekly tracking
+2. Patches `~/.claude/AGENTS.md` with the mandatory two-bar footer rule
+3. Creates `~/.claude/projects/.../memory/usage_tracking.json` for fallback tracking
 
 ## Manual installation
 
@@ -50,6 +51,11 @@ If the script doesn't work, manually:
    mkdir -p ~/.claude/projects/$(ls ~/.claude/projects/ | head -1)/memory
    echo '{"entries":[]}' > ~/.claude/projects/$(ls ~/.claude/projects/ | head -1)/memory/usage_tracking.json
    ```
+
+## Requirements
+
+- **Chrome MCP** (Claude in Chrome extension) — for real-time usage data
+- Without Chrome MCP, falls back to JSON self-tracking automatically
 
 ## Uninstall
 
