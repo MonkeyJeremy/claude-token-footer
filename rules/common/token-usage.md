@@ -38,8 +38,7 @@ On **every response**, as the final step, use this priority order:
 ### Primary: Chrome MCP (real-time, accurate)
 
 1. Call `tabs_context_mcp` to discover available Chrome tabs.
-2. If a tab with URL `claude.ai/settings/usage` already exists, use its `tabId`.
-   Otherwise, navigate an existing MCP tab to `https://claude.ai/settings/usage`.
+2. Always navigate/reload to `https://claude.ai/settings/usage` — never read from a cached tab (stale data).
 3. Execute this JavaScript in that tab:
    ```javascript
    const bars = document.querySelectorAll('[role="progressbar"]');
